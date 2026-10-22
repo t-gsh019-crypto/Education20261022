@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>온라인 교무실 게시판</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1f2328; --muted: #6b6f76; --line: #e3e1da;
+    --accent: #1f5f8b; --notice: #b4462b; --task: #2e7d4f; --pin: #f3e7c4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181b; --card: #1f2226; --ink: #e8e6e1; --muted: #9a9ea5; --line: #33373d;
+      --accent: #6fb0dd; --notice: #e48a70; --task: #6cc493; --pin: #3a3423; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; line-height: 1.6; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px;
+    border-bottom: 2px solid var(--ink); padding-bottom: 12px; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: .9rem; margin: 2px 0 0; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 8px 14px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .toolbar input { flex: 1; min-width: 160px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .post { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+  .post.pinned { background: var(--pin); }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .85rem; color: var(--muted); }
+  .badge { font-weight: 700; font-size: .78rem; padding: 2px 8px; border-radius: 999px; color: #fff; }
+  .badge.공지 { background: var(--notice); } .badge.업무전달 { background: var(--task); }
+  .post h2 { margin: 6px 0 6px; font-size: 1.1rem; }
+  .post p { margin: 0; white-space: pre-wrap; word-break: break-word; }
+  .due { font-weight: 600; color: var(--task); }
+  .due.over { color: var(--notice); }
+  .post .actions { margin-top: 10px; text-align: right; }
+  .post .actions button { font-size: .8rem; padding: 4px 10px; }
+  .empty, .status { color: var(--muted); text-align: center; padding: 24px 0; }
+  dialog { border: none; border-radius: 14px; padding: 0; width: min(560px, calc(100vw - 32px));
+    background: var(--card); color: var(--ink); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  form.box { padding: 20px; display: grid; gap: 12px; }
+  form.box h3 { margin: 0; }
+  label { display: grid; gap: 4px; font-size: .9rem; color: var(--muted); }
+  form.box input, form.box select, form.box textarea { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  textarea { min-height: 140px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .check { display: flex; gap: 8px; align-items: center; color: var(--ink); }
+  .btns { display: flex; justify-content: end; gap: 8px; }
+  .hint { font-size: .8rem; color: var(--muted); margin: 0; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 10px 16px; border-radius: 8px; font-size: .9rem; display: none; max-width: calc(100vw - 32px); }
+  @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>공지 · 업무 전달 게시판</h1>
+      <p class="sub">온라인 교무실 · 글은 GitHub 저장소 <code>data/posts.json</code>에 저장됩니다</p>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button id="btnToken" type="button">🔑 연결 설정</button>
+      <button id="btnNew" class="primary" type="button">＋ 글쓰기</button>
+    </div>
+  </header>
+
+  <div class="tabs" role="group" aria-label="분류">
+    <button type="button" data-filter="전체" aria-pressed="true">전체</button>
+    <button type="button" data-filter="공지" aria-pressed="false">공지</button>
+    <button type="button" data-filter="업무전달" aria-pressed="false">업무 전달</button>
+  </div>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="제목·내용·작성자 검색">
+    <button id="btnReload" type="button">↻ 새로고침</button>
+  </div>
+  <div id="list"><p class="status">불러오는 중…</p></div>
+</div>
+
+<dialog id="dlgPost">
+  <form class="box" id="formPost" method="dialog">
+    <h3>새 글 쓰기</h3>
+    <div class="row">
+      <label>분류
+        <select name="type"><option>공지</option><option>업무전달</option></select>
+      </label>
+      <label>작성자<input name="author" required maxlength="30" placeholder="예: 교무부 김OO"></label>
+    </div>
+    <label>제목<input name="title" required maxlength="100"></label>
+    <label>내용<textarea name="body" required></textarea></label>
+    <div class="row">
+      <label>마감일 (업무 전달용, 선택)<input name="due" type="date"></label>
+      <label class="check" style="align-self:end"><input name="pinned" type="checkbox"> 상단 고정</label>
+    </div>
+    <p class="hint">⚠️ 공개 저장소입니다. 개인정보(학생 이름·연락처 등)는 쓰지 마세요.</p>
+    <div class="btns">
+      <button type="button" data-close>취소</button>
+      <button type="submit" class="primary" id="btnSave">올리기</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgToken">
+  <form class="box" id="formToken" method="dialog">
+    <h3>GitHub 연결 설정</h3>
+    <p class="hint">글을 올리거나 지우려면 이 저장소에 쓰기 권한이 있는 GitHub 토큰(개인 접속 키)이 필요합니다.
+      토큰은 이 브라우저에만 저장되고 다른 곳으로 보내지 않습니다(GitHub 제외).</p>
+    <label>저장소 (소유자/이름)<input name="repo" required placeholder="t-gsh019-crypto/Education20261022"></label>
+    <label>브랜치<input name="branch" required placeholder="main"></label>
+    <label>토큰<input name="token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    <p class="hint"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">토큰 만들기</a>
+      → Repository access: 이 저장소만 → Permissions: Contents <b>Read and write</b></p>
+    <div class="btns">
+      <button type="button" id="btnForget">토큰 지우기</button>
+      <button type="button" data-close>취소</button>
+      <button type="submit" class="primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const FILE = "data/posts.json";
+  const DEFAULT_REPO = "t-gsh019-crypto/Education20261022";
+  const store = {
+    get(k, d = "") { try { return localStorage.getItem("board." + k) ?? d; } catch { return d; } },
+    set(k, v) { try { v ? localStorage.setItem("board." + k, v) : localStorage.removeItem("board." + k); } catch {} }
+  };
+  const cfg = () => ({ repo: store.get("repo", DEFAULT_REPO), branch: store.get("branch", "main"), token: store.get("token") });
+
+  let posts = [], filter = "전체", sha = null;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const toast = msg => { const t = $("#toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 3500); };
+
+  // UTF-8 safe base64
+  const b64enc = str => { const bytes = new TextEncoder().encode(str); let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin); };
+  const b64dec = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, "")), c => c.charCodeAt(0)));
+
+  async function api(path, opts = {}) {
+    const { token } = cfg();
+    const res = await fetch("https://api.github.com" + path, {
+      ...opts,
+      headers: { "Accept": "application/vnd.github+json", ...(token ? { "Authorization": "Bearer " + token } : {}), ...(opts.headers || {}) }
+    });
+    if (!res.ok) {
+      const msg = { 401: "토큰이 올바르지 않습니다", 403: "권한이 없거나 요청 한도를 넘었습니다", 404: "저장소나 파일을 찾을 수 없습니다", 409: "다른 사람이 동시에 수정했습니다. 다시 시도해 주세요", 422: "저장 요청이 거절되었습니다" }[res.status];
+      throw new Error((msg || "GitHub 오류") + " (" + res.status + ")");
+    }
+    return res.json();
+  }
+
+  // 최신 파일 내용과 sha(파일 버전 표시)를 GitHub에서 직접 읽기
+  async function fetchFromGitHub() {
+    const { repo, branch } = cfg();
+    const data = await api(`/repos/${repo}/contents/${FILE}?ref=${encodeURIComponent(branch)}&t=${Date.now()}`);
+    sha = data.sha;
+    return JSON.parse(b64dec(data.content));
+  }
+
+  async function load() {
+    $("#list").innerHTML = '<p class="status">불러오는 중…</p>';
+    try {
+      if (cfg().token) {
+        posts = await fetchFromGitHub();
+      } else {
+        try {
+          const res = await fetch(FILE + "?t=" + Date.now(), { cache: "no-store" });
+          if (!res.ok) throw new Error();
+          posts = await res.json();
+        } catch {
+          posts = await fetchFromGitHub();
+        }
+      }
+      render();
+    } catch (e) {
+      $("#list").innerHTML = `<p class="status">글을 불러오지 못했습니다: ${esc(e.message)}</p>`;
+    }
+  }
+
+  async function save(mutator, message) {
+    const { repo, branch, token } = cfg();
+    if (!token) { toast("먼저 🔑 연결 설정에서 토큰을 입력해 주세요"); $("#dlgToken").showModal(); return false; }
+    const latest = await fetchFromGitHub();          // 저장 직전 최신본에 반영(덮어쓰기 방지)
+    const next = mutator(latest);
+    await api(`/repos/${repo}/contents/${FILE}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, content: b64enc(JSON.stringify(next, null, 2) + "\n"), sha, branch })
+    });
+    posts = next; render();
+    return true;
+  }
+
+  function fmtDate(iso) {
+    const d = new Date(iso); if (isNaN(d)) return "";
+    return d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function render() {
+    const q = $("#search").value.trim().toLowerCase();
+    const today = new Date().toISOString().slice(0, 10);
+    const list = posts
+      .filter(p => filter === "전체" || p.type === filter)
+      .filter(p => !q || [p.title, p.body, p.author].join(" ").toLowerCase().includes(q))
+      .sort((a, b) => (b.pinned - a.pinned) || String(b.date).localeCompare(String(a.date)));
+    if (!list.length) { $("#list").innerHTML = '<p class="empty">게시글이 없습니다.</p>'; return; }
+    $("#list").innerHTML = list.map(p => `
+      <article class="post ${p.pinned ? "pinned" : ""}">
+        <div class="meta">
+          <span class="badge ${esc(p.type)}">${esc(p.type === "업무전달" ? "업무 전달" : p.type)}</span>
+          ${p.pinned ? "<span>📌 고정</span>" : ""}
+          <span>${esc(p.author)}</span><span>·</span><span>${esc(fmtDate(p.date))}</span>
+          ${p.due ? `<span class="due ${p.due < today ? "over" : ""}">마감 ${esc(p.due)}${p.due < today ? " (지남)" : ""}</span>` : ""}
+        </div>
+        <h2>${esc(p.title)}</h2>
+        <p>${esc(p.body)}</p>
+        <div class="actions"><button type="button" data-del="${esc(p.id)}">삭제</button></div>
+      </article>`).join("");
+  }
+
+  function newId() {
+    const d = new Date(), pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}-${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  // 이벤트
+  document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+    filter = b.dataset.filter;
+    document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    render();
+  }));
+  $("#search").addEventListener("input", render);
+  $("#btnReload").addEventListener("click", load);
+  document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => b.closest("dialog").close()));
+
+  $("#btnNew").addEventListener("click", () => {
+    if (!cfg().token) { toast("글을 올리려면 먼저 토큰을 연결해 주세요"); $("#btnToken").click(); return; }
+    const f = $("#formPost"); f.reset(); f.author.value = store.get("author"); $("#dlgPost").showModal();
+  });
+  $("#formPost").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const f = ev.target, btn = $("#btnSave");
+    const post = { id: newId(), type: f.type.value, title: f.title.value.trim(), body: f.body.value.trim(),
+      author: f.author.value.trim(), date: new Date().toISOString(), due: f.due.value, pinned: f.pinned.checked };
+    store.set("author", post.author);
+    btn.disabled = true; btn.textContent = "올리는 중…";
+    try {
+      if (await save(list => [post, ...list], `게시글 추가: [${post.type}] ${post.title}`)) { $("#dlgPost").close(); toast("올렸습니다. GitHub에 저장되었습니다."); }
+    } catch (e) { toast("실패: " + e.message); }
+    finally { btn.disabled = false; btn.textContent = "올리기"; }
+  });
+
+  $("#list").addEventListener("click", async ev => {
+    const id = ev.target.dataset?.del; if (!id) return;
+    const p = posts.find(x => x.id === id);
+    if (!p || !confirm(`"${p.title}" 글을 삭제할까요?`)) return;
+    try { if (await save(list => list.filter(x => x.id !== id), `게시글 삭제: ${p.title}`)) toast("삭제했습니다."); }
+    catch (e) { toast("실패: " + e.message); }
+  });
+
+  $("#btnToken").addEventListener("click", () => {
+    const f = $("#formToken"), c = cfg();
+    f.repo.value = c.repo; f.branch.value = c.branch; f.token.value = c.token;
+    $("#dlgToken").showModal();
+  });
+  $("#formToken").addEventListener("submit", ev => {
+    ev.preventDefault(); const f = ev.target;
+    store.set("repo", f.repo.value.trim()); store.set("branch", f.branch.value.trim()); store.set("token", f.token.value.trim());
+    $("#dlgToken").close(); toast("연결 정보를 저장했습니다."); load();
+  });
+  $("#btnForget").addEventListener("click", () => { store.set("token", ""); $("#formToken").token.value = ""; toast("토큰을 지웠습니다."); });
+
+  load();
+})();
+</script>
+</body>
+</html>
